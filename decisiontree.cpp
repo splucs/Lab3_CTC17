@@ -36,7 +36,7 @@ vector<block> blocks;
 typedef vector<block>::iterator pblock;
 
 void ReadUsers() {
-	printf("Reading users...\n");
+	printf("Reading users... ");
 	
 	//Open file
 	ifstream input("users.dat");
@@ -65,7 +65,7 @@ void ReadUsers() {
 }
 
 void ReadMovies() {
-	printf("Reading movies...\n");
+	printf("Reading movies... ");
 	
 	//Open file
 	ifstream input("movies.dat");
@@ -106,7 +106,7 @@ void ReadMovies() {
 }
 
 void ReadRatings() {
-	printf("Reading ratings...\n");
+	printf("Reading ratings... ");
 	
 	//Open file
 	ifstream input("ratings.dat");
@@ -215,7 +215,7 @@ void GenerateDataBlock() {
 		current.data[3] = ReduceOccupation(usr.occupation);
 		current.data[4] = ReduceZipCode(usr.zipcode);
 		current.data[5] = ReduceTimestamp(rat.timestamp);
-		current.value = rat.value;
+		current.value = min(5, max(1, rat.value));
 		
 		//Add to dataset
 		blocks.push_back(current);
@@ -228,7 +228,7 @@ struct node {
 	int majorityValue;
 	int size;
 	map<int, node*> sons;
-	node(int _value) : value(_value), atribute(-1), majorityValue(-1), size(1) {}
+	node(int _value) : value(_value), atribute(-1), majorityValue(3), size(1) {}
 };
 
 inline int GetMajorityValue(pblock begin, pblock end) {
@@ -243,10 +243,12 @@ inline int GetMajorityValue(pblock begin, pblock end) {
 	return ans;
 }
 
-int curAtributeComp;
 bool comp(const block & a, const block & b) {
 	//Sort an array of block according to data of atribute curAtributeComp
-	return a.data[curAtributeComp] < b.data[curAtributeComp];
+	for(int i=0; i<MAX_ATRIBUTE; i++) {
+		if (a.data[i] != b.data[i]) return a.data[i] < b.data[i];
+	}
+	return false;
 }
 
 node* BuildDecisionTree(pblock begin, pblock end, int atribute, int pattern) {
@@ -274,10 +276,6 @@ node* BuildDecisionTree(pblock begin, pblock end, int atribute, int pattern) {
 	node* tree = new node(-1);
 	tree->majorityValue = GetMajorityValue(begin, end);
 	tree->atribute = atribute;
-	
-	//Sort array according to current atribute
-	curAtributeComp = atribute;
-	sort(begin, end, comp);
 	
 	//Build subtree
 	for(pblock it = begin, last = begin; it != end; it++) {
@@ -318,13 +316,13 @@ void Delete(node* treeNode) {
 	delete treeNode;
 }
 
-vector<int> movieAvgRatings;
+int movieAvgRatings[MAX_MOVIES];
+double sumRatings[MAX_MOVIES];
+int numRatings[MAX_MOVIES];
 
 void ComputeMovieAverageRatings(int trainingSetSize, int nMovies) {
 	
 	//Compute sums of all ratings and number of ratings for each movie
-	double sumRatings[MAX_MOVIES];
-	int numRatings[MAX_MOVIES];
 	for(int i=1; i<=nMovies; i++) {
 		sumRatings[i] = 0.0;
 		numRatings[i] = 0;
@@ -332,14 +330,14 @@ void ComputeMovieAverageRatings(int trainingSetSize, int nMovies) {
 	for(int it = 0; it < trainingSetSize; it++) {
 		int movieid = blocks[it].data[0];
 		numRatings[movieid]++;
-		sumRatings[movieid] += blocks[it].value;
+		sumRatings[movieid] += (double)blocks[it].value;
 	}
 
 	//Compute average and aproximate
-	printf("nmovies = %d ", nMovies);
 	for(int i=1; i<=nMovies; i++) {
 		if (numRatings[i] == 0) movieAvgRatings[i] = 3;
 		else movieAvgRatings[i] = int(sumRatings[i]/numRatings[i] + 0.4999999);
+		if (movieAvgRatings[i] < 1.0 || movieAvgRatings[i] > 5.0) printf("%.3f %d %.3f\n", sumRatings[i], numRatings[i], movieAvgRatings[i]);
 	}
 }
 
@@ -367,8 +365,8 @@ void RunDataset(pblock begin, pblock end) {
 		int trueRating = it->value;
 		decisionTreeStd += (decisionTreeRating - trueRating)*(decisionTreeRating - trueRating);
 		avgStd += (averageRating - trueRating)*(averageRating - trueRating);
-		decisionTreeDiff += fabs(decisionTreeRating - trueRating);
-		avgDiff += fabs(averageRating - trueRating);
+		decisionTreeDiff += (decisionTreeRating == trueRating ? 1.0 : 0.0);
+		avgDiff += (averageRating == trueRating ? 1.0 : 0.0);
 	}
 	
 	//Standart deviation and sum of absolute values of diferences
@@ -390,40 +388,39 @@ int main() {
 	GenerateDataBlock();
 	printf("done, number os blocks = %u\n", blocks.size());
 	
-	//Randomly separate VALIDATIONSET_RATIO*100% of data for validation set
-	printf("Separating %.2f%% of data blocks for validation set... ", VALIDATIONSET_RATIO*100.0);
-	int validationSetSize = blocks.size()*VALIDATIONSET_RATIO;
-	int trainingSetSize = blocks.size() - validationSetSize;
+	//Try multiple ratios for validation set size
 	//srand(time(NULL));
-	random_shuffle(blocks.begin(), blocks.end());
-	printf("done, training set size = %d, validation set size = %d\n", trainingSetSize, validationSetSize);
-	
-	//Get average ratings for all movies
-	printf("Computing average movie ratings... ");
-	movieAvgRatings.resize(movies.size()+1);
-	ComputeMovieAverageRatings(trainingSetSize, movies.size());
-	printf("done\n");
-	
-	//Build decision tree
-	printf("Building tree... ");
-	decisionTree = BuildDecisionTree(blocks.begin(), blocks.begin() + trainingSetSize, 0, 3);
-	printf("done, size = %d\n", decisionTree->size);
-	
-	//Run training set
-	printf("Testing training set (%d samples)...", trainingSetSize);
-	RunDataset(blocks.begin(), blocks.begin() + trainingSetSize);
-	printf("done\n");
-	printf("standart deviation for decision tree = %.3f\nstandart deviation for average ratings = %.3f\n", decisionTreeStd, avgStd);
-	printf("average diference for decision tree = %.3f\naverage diference for average ratings = %.3f\n", decisionTreeDiff, avgDiff);
-	
-	//Run validation set
-	printf("Testing validation set (%d samples)...", validationSetSize);
-	RunDataset(blocks.begin() + trainingSetSize, blocks.end());
-	printf("done\n");
-	printf("standart deviation for decision tree = %.3f\nstandart deviation for average ratings = %.3f\n", decisionTreeStd, avgStd);
-	printf("average diference for decision tree = %.3f\naverage diference for average ratings = %.3f\n", decisionTreeDiff, avgDiff);
-	
-	//Destroy tree at end
-	Delete(decisionTree);
+	for (int mult = 1; mult <= 10; mult++) {
+		//printf("%d\\%% ", mult*5);
+		
+		//Randomly separate VALIDATIONSET_RATIO*mult*100% of data for validation set
+		printf("Separating %.2f%% of data blocks for validation set... ", VALIDATIONSET_RATIO*mult*100.0);
+		int validationSetSize = mult*blocks.size()*VALIDATIONSET_RATIO;
+		int trainingSetSize = blocks.size() - validationSetSize;
+		random_shuffle(blocks.begin(), blocks.end());
+		printf("done, %d blocks\n", validationSetSize);
+		
+		//Get average ratings for all movies and build decision tree
+		printf("Building tree and computing average movie ratings... ");
+		ComputeMovieAverageRatings(trainingSetSize, movies.size());
+		sort(blocks.begin(), blocks.begin() + trainingSetSize, comp);
+		decisionTree = BuildDecisionTree(blocks.begin(), blocks.begin() + trainingSetSize, 0, 3);
+		printf("done, tree size %d\n", decisionTree->size);
+		
+		//Run training set
+		printf("Testing training set (size %d)... ", trainingSetSize);
+		RunDataset(blocks.begin(), blocks.begin() + trainingSetSize);
+		printf("done, DT %.3f-%.2f%%, avg. %.3f-%.2f%%\n", decisionTreeStd, 100.0*decisionTreeDiff, avgStd, 100.0*avgDiff);
+		//printf("& %.3f-%.2f\\%% & %.3f-%.2f\\%% ", decisionTreeStd, 100.0*decisionTreeDiff, avgStd, 100.0*avgDiff);
+		
+		//Run validation set
+		printf("Testing validation set (size %d)... ", validationSetSize);
+		RunDataset(blocks.begin() + trainingSetSize, blocks.end());
+		printf("done, DT %.3f-%.2f%%, avg. %.3f-%.2f%%\n", decisionTreeStd, 100.0*decisionTreeDiff, avgStd, 100.0*avgDiff);
+		//printf("& %.3f-%.2f\\%% & %.3f-%.2f\\%%\\\\\n", decisionTreeStd, 100.0*decisionTreeDiff, avgStd, 100.0*avgDiff);
+		
+		//Destroy tree at end
+		Delete(decisionTree);
+	}
 	return 0;
 }
