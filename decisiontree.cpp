@@ -350,19 +350,28 @@ double avgDiff;
 node* decisionTree;
 
 void RunDataset(pblock begin, pblock end) {
+	
+	//Initialize
 	int datasetSize = int(end - begin);
 	decisionTreeStd = 0.0;
 	avgStd = 0.0;
+	decisionTreeDiff = 0.0;
+	avgDiff = 0.0;
+	
+	//iterate over blocks
 	for(pblock it = begin; it != end; it++) {
+		
+		//Compute values
 		int decisionTreeRating = Query(*it, decisionTree, 0);
 		int averageRating = movieAvgRatings[it->data[0]];
 		int trueRating = it->value;
-		//printf("dt = %d\n", (averageRating - trueRating)*(averageRating - trueRating));
 		decisionTreeStd += (decisionTreeRating - trueRating)*(decisionTreeRating - trueRating);
 		avgStd += (averageRating - trueRating)*(averageRating - trueRating);
 		decisionTreeDiff += fabs(decisionTreeRating - trueRating);
 		avgDiff += fabs(averageRating - trueRating);
 	}
+	
+	//Standart deviation and sum of absolute values of diferences
 	decisionTreeStd = sqrt(decisionTreeStd / datasetSize);
 	avgStd = sqrt(avgStd / datasetSize);
 	decisionTreeDiff /= datasetSize;
@@ -376,7 +385,7 @@ int main() {
 	ReadRatings();
 	ReadUsers();
 	
-	//Build decision tree data from ratings, users ans movies info
+	//Build decision tree data from ratings, users and movies info
 	printf("Generating data blocks... ");
 	GenerateDataBlock();
 	printf("done, number os blocks = %u\n", blocks.size());
